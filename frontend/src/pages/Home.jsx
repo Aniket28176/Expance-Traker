@@ -8,7 +8,7 @@ import ExpencesTable from './ExpencesTable';
 import ExpenseTrackerForm from './ExpenceTrackerForm';
 import ExpenceDetails from './ExpenceDetails';
 
-const APIurl = "/api";
+const APIurl = import.meta.env.VITE_API_URL || "http://localhost:8081";
 
 function Home() {
   const[loggedInUser,setLoggedInUser] = useState('');

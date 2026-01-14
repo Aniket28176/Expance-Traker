@@ -21,12 +21,6 @@ app.use('/auth',AuthRouter);
 app.use('/products',ProductRouter);
 app.use('/expences',ensureAuthenticated,ExpenceRouter)
 
-// For Vercel deployment, export the app
-module.exports = app;
-
-// For local development
-if (require.main === module) {
-    app.listen(PORT, ()=>{
-        console.log(`server is running on PORT ${PORT}`);
-    });
-}
+app.listen(PORT, ()=>{
+console.log(`server is running on PORT ${PORT}`);
+});

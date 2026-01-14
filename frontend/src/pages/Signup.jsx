@@ -27,7 +27,7 @@ const navigate = useNavigate();
     }
 
     try {
-      const url = "/api/auth/signup";
+      const url = `${import.meta.env.VITE_API_URL || "http://localhost:8081"}/auth/signup`;
       const response = await fetch(url,{
         method:"POST",
         headers:{
