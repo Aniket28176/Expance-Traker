@@ -7,6 +7,7 @@ require('./Models/db')
 const AuthRouter = require('./Routes/AuthRouter');
 const ProductRouter = require('./Routes/ProductRouter');
 const ExpenceRouter = require('./Routes/ExpenceRouter');
+const ExpenseRouter = require('./Routes/ExpenseRouter');
 const ensureAuthenticated = require('./Middlewares/Auth');
 
 const PORT =process.env.PORT || 8082;
@@ -20,6 +21,7 @@ app.use(cors());
 app.use('/auth',AuthRouter);
 app.use('/products',ProductRouter);
 app.use('/expences',ensureAuthenticated,ExpenceRouter)
+app.use('/api/expenses', ensureAuthenticated, ExpenseRouter);
 
 app.listen(PORT, ()=>{
 console.log(`server is running on PORT ${PORT}`);

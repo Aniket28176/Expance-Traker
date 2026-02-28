@@ -2,19 +2,38 @@ import React from 'react'
 import { useEffect } from 'react';
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { ToastContainer } from 'react-toastify';
 import { handleError, handleSuccess } from '../utils/index';
 import ExpencesTable from './ExpencesTable';
 import ExpenseTrackerForm from './ExpenceTrackerForm';
 import ExpenceDetails from './ExpenceDetails';
 
-const APIurl = import.meta.env.VITE_API_URL || "http://localhost:8081";
+// Normalize API URL: prefer VITE_API_URL, fall back to default
+const APIurlRaw = import.meta.env.VITE_API_URL || "http://localhost:8081";
+let APIurl = APIurlRaw;
+try {
+  // If someone set just a port like ":8082", convert to full URL
+  if (/^:\d+$/.test(APIurlRaw)) {
+    APIurl = `http://localhost${APIurlRaw}`;
+  } else if (!/^https?:\/\//i.test(APIurlRaw)) {
+    // If missing protocol but includes host like "localhost:8082", add http://
+    APIurl = `http://${APIurlRaw}`;
+  }
+} catch (e) {
+  APIurl = "http://localhost:8082";
+}
+console.log('Using APIurl:', APIurl);
 
 function Home() {
   const[loggedInUser,setLoggedInUser] = useState('');
   const [expences,setExpences] = useState([]);
   const [ExpenceAmt,setExpenceAmt] = useState(0);
   const [IncomeAmt,setIncomeAmt] = useState(0);
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState(new Date().getFullYear());
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const years = Array.from({length:7},(_,i)=> new Date().getFullYear() + i); // current year .. +6
   const navigate = useNavigate();
 
   
@@ -37,23 +56,23 @@ function Home() {
       },1000)
     }
 
-    const fetchExpences = async ()=>{
+    const fetchExpences = async (m = month, y = year) =>{
       try {
-        const url = `${APIurl}/expences`;
-        const headers = {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        }
-        const response = await fetch(url,headers);
-        if (response.status ===403){
+        const token = localStorage.getItem('token');
+        const params = {};
+        if (m) params.month = m;
+        if (y) params.year = y;
+        const response = await axios.get(`${APIurl}/api/expenses`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params
+        });
+        const result = response.data;
+        setExpences(result.data);
+      } catch (error) {
+        if (error.response && error.response.status === 403) {
           navigate('/login');
           return;
         }
-        const result = await response.json();
-        console.log(result.data);
-        setExpences(result.data);
-      } catch (error) {
         handleError(error.message);
       }
     }
@@ -61,31 +80,42 @@ function Home() {
 
     useEffect(()=>{
       setLoggedInUser(localStorage.getItem('loggedInUser'));
-       fetchExpences();
+      const now = new Date();
+      const defaultMonth = months[now.getMonth()];
+      setMonth(defaultMonth);
+      setYear(now.getFullYear());
     },[])
+
+    useEffect(()=>{
+      if (month && year) fetchExpences(month, year);
+    },[month, year])
 
 
    const addExpences = async (data)=>{
       try {
-        const url = `${APIurl}/expences`;
-        const headers = {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type':'application/json'
-          },
-          method: 'POST',
-          body: JSON.stringify(data)
-        }
-        const response = await fetch(url,headers);
-        if (response.status ===403){
+        const token = localStorage.getItem('token');
+        // map frontend `text` field to API `title` and attach month/year
+        const payload = {
+          title: data.text || data.title,
+          amount: Number(data.amount),
+          category: data.category || data.category || '',
+          date: data.date || new Date(),
+          month: month,
+          year: year
+        };
+
+        const response = await axios.post(`${APIurl}/api/expenses`, payload, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        handleSuccess(response.data.message);
+        // re-fetch to update UI
+        fetchExpences();
+      } catch (error) {
+        if (error.response && error.response.status === 403) {
           navigate('/login');
           return;
         }
-        const result = await response.json();
-        console.log(result.data);
-        setExpences(result.data);
-        handleSuccess(result.message);
-      } catch (error) {
         handleError(error.message);
       }
     }
@@ -93,30 +123,31 @@ function Home() {
 
      const handleDeleteExpence = async (expenceId) => {
   try {
-    const url = `${APIurl}/expences/${expenceId}`;
-    const headers = {
-      method: "DELETE",
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    };
-
-    const response = await fetch(url, headers);
-
-    if (response.status === 403) {
+    const token = localStorage.getItem('token');
+    const response = await axios.delete(`${APIurl}/api/expenses/${expenceId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    handleSuccess(response.data.message);
+    fetchExpences();
+  } catch (err) {
+    if (err.response && err.response.status === 403) {
       localStorage.removeItem('token');
       navigate('/login');
       return;
     }
-
-    const result = await response.json();
-    handleSuccess(result?.message);
-    setExpences(result.data);
-
-  } catch (err) {
     handleError(err.message);
   }
 };
+
+  const handleMonthChange = (e) => setMonth(e.target.value);
+  const handleYearChange = (e) => setYear(Number(e.target.value));
+
+  const calculateTotal = () => {
+    const amounts = expences.map(item => item.amount || 0);
+    const income = amounts.filter(a => a > 0).reduce((s, v) => s + v, 0);
+    const expense = amounts.filter(a => a < 0).reduce((s, v) => s + v, 0) * -1;
+    return { income, expense };
+  }
 
 
   return (
@@ -124,6 +155,17 @@ function Home() {
       <div className='user-section'>
       <h1>Welcome,{ loggedInUser }</h1>
       <button  onClick={handleLogout}>Logout</button>
+      </div>
+      <div style={{display:'flex', gap: '8px', alignItems:'center', marginBottom: '12px'}}>
+        <label>Month:</label>
+        <select value={month} onChange={handleMonthChange}>
+          <option value=''>--Select Month--</option>
+          {months.map(m=> <option key={m} value={m}>{m}</option>)}
+        </select>
+        <label>Year:</label>
+        <select value={year} onChange={handleYearChange}>
+          {years.map(y=> <option key={y} value={y}>{y}</option>)}
+        </select>
       </div>
       <ExpenceDetails IncomeAmt={IncomeAmt} ExpenceAmt={ExpenceAmt}/>
       <ExpenseTrackerForm addExpences={addExpences}/>
